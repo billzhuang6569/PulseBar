@@ -12,7 +12,8 @@ final class StatusBarController: NSObject {
     init(preferences: DisplayPreferences, sampler: MetricsSampler) {
         self.preferences = preferences
         self.sampler = sampler
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: 62)
+        statusItem.autosaveName = "PulseBarStatusItem"
 
         super.init()
 
@@ -67,36 +68,42 @@ final class StatusBarController: NSObject {
                 updateStatusItem(snapshot: sampler.snapshot)
             }
             .store(in: &cancellables)
+
+        preferences.$menuBarKind
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                updateStatusItem(snapshot: sampler.snapshot)
+            }
+            .store(in: &cancellables)
     }
 
     private func updateStatusItem(snapshot: SystemSnapshot) {
         guard let button = statusItem.button else { return }
 
-        let enabledKinds = MetricKind.allCases.filter { preferences.enabledKinds.contains($0) }
-        let primaryKind = enabledKinds.first ?? .memory
-        let readings = enabledKinds.compactMap { snapshot[$0] }
+        let primaryKind = preferences.menuBarKind
+        let reading = snapshot[primaryKind]
 
-        button.image = NSImage(systemSymbolName: primaryKind.symbolName, accessibilityDescription: primaryKind.title)
+        statusItem.length = preferences.showPercentLabels ? 62 : 28
+        button.image = NSImage(systemSymbolName: primaryKind.shortSymbolName, accessibilityDescription: primaryKind.title)
         button.image?.isTemplate = true
-        button.title = statusTitle(for: readings)
+        button.title = preferences.showPercentLabels ? statusTitle(for: reading, kind: primaryKind) : ""
         button.contentTintColor = .labelColor
     }
 
-    private func statusTitle(for readings: [MetricReading]) -> String {
-        if readings.isEmpty { return " --" }
-
-        let parts = readings.prefix(3).map { reading in
-            switch reading.kind {
-            case .memory, .disk, .cpu, .battery:
-                return preferences.showPercentLabels ? "\(reading.kind.title) \(reading.primaryText)" : reading.primaryText
-            case .network:
-                return reading.secondaryText
-                    .replacingOccurrences(of: "↓ ", with: "↓")
-                    .replacingOccurrences(of: "  ↑ ", with: " ↑")
-            }
+    private func statusTitle(for reading: MetricReading?, kind: MetricKind) -> String {
+        guard let reading else { return " --" }
+        switch kind {
+        case .network:
+            let cleaned = reading.primaryText
+                .replacingOccurrences(of: "/s", with: "")
+                .replacingOccurrences(of: " ", with: "")
+            return " \(cleaned.prefix(5))"
+        case .battery where reading.primaryText == "AC":
+            return " AC"
+        default:
+            return " \(MetricFormatter.compactPercent(reading.value))%"
         }
-
-        return " " + parts.joined(separator: "  ")
     }
 
     @objc private func togglePopover(_ sender: Any?) {

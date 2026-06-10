@@ -81,7 +81,7 @@ final class SystemMetricsProvider {
         return MetricReading(
             kind: .network,
             value: min(combined / 1_000_000 * 100, 100),
-            primaryText: MetricFormatter.speed(combined),
+            primaryText: "\(MetricFormatter.compactSpeed(combined))/s",
             secondaryText: "↓ \(MetricFormatter.speed(down))  ↑ \(MetricFormatter.speed(up))",
             detailText: "累计下载 \(MetricFormatter.bytes(Double(totals.received)))，上传 \(MetricFormatter.bytes(Double(totals.sent)))"
         )

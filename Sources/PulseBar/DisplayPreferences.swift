@@ -19,10 +19,16 @@ final class DisplayPreferences: ObservableObject {
         didSet { save() }
     }
 
+    @Published var menuBarKind: MetricKind {
+        didSet { save() }
+    }
+
     private let defaults: UserDefaults
     private let enabledKey = "enabledKinds"
     private let refreshKey = "refreshInterval"
     private let percentKey = "showPercentLabels"
+    private let menuBarKindKey = "menuBarKind"
+    private let v2DefaultsKey = "v2DefaultsApplied"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -30,11 +36,18 @@ final class DisplayPreferences: ObservableObject {
         let savedKinds = defaults.stringArray(forKey: enabledKey)?
             .compactMap(MetricKind.init(rawValue:))
 
-        enabledKinds = Set(savedKinds?.isEmpty == false ? savedKinds! : [.memory, .network])
+        let shouldApplyV2Defaults = defaults.object(forKey: v2DefaultsKey) == nil
+        if shouldApplyV2Defaults {
+            enabledKinds = Set(MetricKind.allCases)
+            defaults.set(true, forKey: v2DefaultsKey)
+        } else {
+            enabledKinds = Set(savedKinds?.isEmpty == false ? savedKinds! : MetricKind.allCases)
+        }
 
         let savedRefresh = defaults.double(forKey: refreshKey)
         refreshInterval = savedRefresh > 0 ? savedRefresh : 2
         showPercentLabels = defaults.object(forKey: percentKey) as? Bool ?? true
+        menuBarKind = defaults.string(forKey: menuBarKindKey).flatMap(MetricKind.init(rawValue:)) ?? .memory
     }
 
     func isEnabled(_ kind: MetricKind) -> Bool {
@@ -53,5 +66,6 @@ final class DisplayPreferences: ObservableObject {
         defaults.set(enabledKinds.map(\.rawValue), forKey: enabledKey)
         defaults.set(refreshInterval, forKey: refreshKey)
         defaults.set(showPercentLabels, forKey: percentKey)
+        defaults.set(menuBarKind.rawValue, forKey: menuBarKindKey)
     }
 }

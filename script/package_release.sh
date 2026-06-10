@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="PulseBar"
-VERSION="0.1.0"
+VERSION="0.2.0"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"

@@ -20,12 +20,32 @@ enum MetricKind: String, CaseIterable, Identifiable {
         }
     }
 
+    var compactTitle: String {
+        switch self {
+        case .memory: "MEM"
+        case .network: "NET"
+        case .disk: "SSD"
+        case .cpu: "CPU"
+        case .battery: "BAT"
+        }
+    }
+
     var symbolName: String {
         switch self {
         case .memory: "memorychip"
         case .network: "arrow.up.arrow.down"
         case .disk: "internaldrive"
         case .cpu: "cpu"
+        case .battery: "battery.75percent"
+        }
+    }
+
+    var shortSymbolName: String {
+        switch self {
+        case .memory: "memorychip.fill"
+        case .network: "arrow.down.up"
+        case .disk: "internaldrive.fill"
+        case .cpu: "cpu.fill"
         case .battery: "battery.75percent"
         }
     }
