@@ -43,7 +43,7 @@ enum MetricKind: String, CaseIterable, Identifiable {
     var shortSymbolName: String {
         switch self {
         case .memory: "memorychip.fill"
-        case .network: "arrow.down.up"
+        case .network: "arrow.up.arrow.down"
         case .disk: "internaldrive.fill"
         case .cpu: "cpu.fill"
         case .battery: "battery.75percent"
