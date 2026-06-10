@@ -3,8 +3,8 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="PulseBar"
-VERSION="0.2.0"
-BUNDLE_VERSION="2"
+VERSION="0.2.1"
+BUNDLE_VERSION="3"
 BUNDLE_ID="show.woe.PulseBar"
 MIN_SYSTEM_VERSION="14.0"
 

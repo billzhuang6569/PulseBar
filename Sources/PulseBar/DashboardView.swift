@@ -42,7 +42,7 @@ struct DashboardView: View {
             VisualEffectBackground(material: .hudWindow, blendingMode: .behindWindow)
                 .ignoresSafeArea()
 
-            VStack(spacing: 14) {
+            VStack(spacing: 10) {
                 header
                 pressurePanel
                 signalStrip
@@ -59,9 +59,9 @@ struct DashboardView: View {
                 settingsPanel
                 footer
             }
-            .padding(16)
+            .padding(12)
         }
-        .frame(width: 430, height: 640)
+        .frame(width: 348, height: 480)
         .onAppear {
             sampler.start(interval: preferences.refreshInterval)
         }
@@ -71,7 +71,7 @@ struct DashboardView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 9) {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(
@@ -84,17 +84,17 @@ struct DashboardView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 38, height: 38)
+                    .frame(width: 32, height: 32)
                 Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("PulseBar")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                 Text("实时 Mac 状态")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
 
@@ -103,27 +103,27 @@ struct DashboardView: View {
             Text(sampler.snapshot.capturedAt, style: .time)
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 
     private var pressurePanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(pressureText)
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
                     Text("综合内存、CPU 与硬盘压力")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 Text("\(Int(pressureValue.rounded()))")
-                    .font(.system(size: 38, weight: .semibold, design: .rounded))
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(pressureColor)
             }
@@ -143,14 +143,14 @@ struct DashboardView: View {
                         .frame(width: max(10, proxy.size.width * pressureValue / 100))
                 }
             }
-            .frame(height: 8)
+            .frame(height: 6)
         }
-        .padding(14)
+        .padding(11)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var signalStrip: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             ForEach(MetricKind.allCases) { kind in
                 if let reading = sampler.snapshot[kind] {
                     SignalPill(reading: reading, isFocused: preferences.menuBarKind == kind)
@@ -160,10 +160,10 @@ struct DashboardView: View {
     }
 
     private var settingsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Label("菜单栏焦点", systemImage: "menubar.rectangle")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
 
                 Spacer()
 
@@ -173,20 +173,21 @@ struct DashboardView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 128)
+                .frame(width: 116)
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Toggle("显示数值", isOn: $preferences.showPercentLabels)
                     .toggleStyle(.switch)
+                    .font(.system(size: 12))
 
                 Spacer()
 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Image(systemName: "clock.arrow.circlepath")
                         .foregroundStyle(.secondary)
                     Slider(value: $preferences.refreshInterval, in: 1...5, step: 1)
-                        .frame(width: 118)
+                        .frame(width: 86)
                     Text("\(Int(preferences.refreshInterval))s")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .frame(width: 24, alignment: .trailing)
@@ -196,7 +197,7 @@ struct DashboardView: View {
 
             Divider()
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
                 ForEach(MetricKind.allCases) { kind in
                     Toggle(isOn: Binding(
                         get: { preferences.isEnabled(kind) },
@@ -207,10 +208,11 @@ struct DashboardView: View {
                     }
                     .toggleStyle(.switch)
                     .controlSize(.small)
+                    .font(.system(size: 12))
                 }
             }
         }
-        .padding(14)
+        .padding(11)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -232,7 +234,7 @@ struct DashboardView: View {
             }
         }
         .buttonStyle(.bordered)
-        .controlSize(.regular)
+        .controlSize(.small)
     }
 }
 
@@ -241,17 +243,17 @@ private struct SignalPill: View {
     let isFocused: Bool
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 3) {
             Image(systemName: reading.kind.shortSymbolName)
                 .font(.system(size: 12, weight: .bold))
             Text(reading.kind == .network ? reading.primaryText : MetricFormatter.compactPercent(reading.value))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .foregroundStyle(isFocused ? .white : reading.kind.tint)
         .frame(maxWidth: .infinity)
-        .frame(height: 48)
+        .frame(height: 38)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isFocused ? reading.kind.tint : reading.kind.tint.opacity(0.12))
@@ -263,21 +265,21 @@ private struct MetricTile: View {
     let reading: MetricReading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 6) {
                 Image(systemName: reading.kind.symbolName)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(reading.kind.tint)
-                    .frame(width: 20)
+                    .frame(width: 17)
 
                 Text(reading.kind.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
 
                 Spacer()
             }
 
             Text(reading.primaryText)
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .font(.system(size: 21, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -288,18 +290,18 @@ private struct MetricTile: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(reading.secondaryText)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
                 Text(reading.detailText)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
         }
-        .frame(minHeight: 138, alignment: .top)
-        .padding(13)
+        .frame(minHeight: 104, alignment: .top)
+        .padding(10)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
