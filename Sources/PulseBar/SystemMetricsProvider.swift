@@ -69,7 +69,9 @@ final class SystemMetricsProvider {
                 value: 0,
                 primaryText: "0/s",
                 secondaryText: "↓ 0/s  ↑ 0/s",
-                detailText: "正在建立网速基线"
+                detailText: "正在建立网速基线",
+                uploadBytesPerSecond: 0,
+                downloadBytesPerSecond: 0
             )
         }
 
@@ -83,7 +85,9 @@ final class SystemMetricsProvider {
             value: min(combined / 1_000_000 * 100, 100),
             primaryText: "\(MetricFormatter.compactSpeed(combined))/s",
             secondaryText: "↓ \(MetricFormatter.speed(down))  ↑ \(MetricFormatter.speed(up))",
-            detailText: "累计下载 \(MetricFormatter.bytes(Double(totals.received)))，上传 \(MetricFormatter.bytes(Double(totals.sent)))"
+            detailText: "累计下载 \(MetricFormatter.bytes(Double(totals.received)))，上传 \(MetricFormatter.bytes(Double(totals.sent)))",
+            uploadBytesPerSecond: up,
+            downloadBytesPerSecond: down
         )
     }
 

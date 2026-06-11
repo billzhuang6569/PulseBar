@@ -67,8 +67,28 @@ struct MetricReading: Identifiable, Equatable {
     let primaryText: String
     let secondaryText: String
     let detailText: String
+    let uploadBytesPerSecond: Double?
+    let downloadBytesPerSecond: Double?
 
     var id: String { kind.rawValue }
+
+    init(
+        kind: MetricKind,
+        value: Double,
+        primaryText: String,
+        secondaryText: String,
+        detailText: String,
+        uploadBytesPerSecond: Double? = nil,
+        downloadBytesPerSecond: Double? = nil
+    ) {
+        self.kind = kind
+        self.value = value
+        self.primaryText = primaryText
+        self.secondaryText = secondaryText
+        self.detailText = detailText
+        self.uploadBytesPerSecond = uploadBytesPerSecond
+        self.downloadBytesPerSecond = downloadBytesPerSecond
+    }
 }
 
 struct SystemSnapshot: Equatable {

@@ -7,6 +7,95 @@ final class PulsePanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
+final class MenuBarMetricView: NSView {
+    var onClick: (() -> Void)?
+
+    private var kind: MetricKind = .memory
+    private var reading: MetricReading?
+    private var showsValue = true
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+    }
+
+    func update(kind: MetricKind, reading: MetricReading?, showsValue: Bool, width: CGFloat) {
+        self.kind = kind
+        self.reading = reading
+        self.showsValue = showsValue
+        frame = NSRect(x: frame.minX, y: frame.minY, width: width, height: NSStatusBar.system.thickness)
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let bounds = self.bounds
+        let iconName = kind.shortSymbolName
+        let iconSize: CGFloat = kind == .network && showsValue ? 15 : 14
+        let iconX: CGFloat = showsValue ? 6 : (bounds.width - iconSize) / 2
+        let iconY = (bounds.height - iconSize) / 2
+
+        if let icon = NSImage(systemSymbolName: iconName, accessibilityDescription: kind.title) {
+            icon.isTemplate = true
+            NSColor.labelColor.set()
+            icon.draw(in: NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize))
+        }
+
+        guard showsValue else { return }
+
+        if kind == .network {
+            drawNetworkText(in: bounds)
+        } else {
+            drawSingleValueText(in: bounds)
+        }
+    }
+
+    private func drawNetworkText(in bounds: NSRect) {
+        let upload = MetricFormatter.compactSpeed(reading?.uploadBytesPerSecond ?? 0)
+        let download = MetricFormatter.compactSpeed(reading?.downloadBytesPerSecond ?? 0)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 9.4, weight: .semibold),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph
+        ]
+
+        NSAttributedString(string: "↑ \(upload)", attributes: attributes)
+            .draw(at: NSPoint(x: 25, y: 17.1))
+        NSAttributedString(string: "↓ \(download)", attributes: attributes)
+            .draw(at: NSPoint(x: 25, y: 4.1))
+    }
+
+    private func drawSingleValueText(in bounds: NSRect) {
+        let text: String
+        if kind == .battery, reading?.primaryText == "AC" {
+            text = "AC"
+        } else {
+            text = "\(MetricFormatter.compactPercent(reading?.value ?? 0))%"
+        }
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: NSColor.labelColor
+        ]
+
+        NSAttributedString(string: text, attributes: attributes)
+            .draw(at: NSPoint(x: 25, y: 8.7))
+    }
+}
+
 final class StatusBarController: NSObject {
     private enum Layout {
         static let panelSize = NSSize(width: 348, height: 480)
@@ -15,6 +104,7 @@ final class StatusBarController: NSObject {
     }
 
     private let statusItem: NSStatusItem
+    private let statusView: MenuBarMetricView
     private let panel: NSPanel
     private let preferences: DisplayPreferences
     private let sampler: MetricsSampler
@@ -26,6 +116,7 @@ final class StatusBarController: NSObject {
         self.sampler = sampler
         statusItem = NSStatusBar.system.statusItem(withLength: 62)
         statusItem.autosaveName = "PulseBarStatusItem"
+        statusView = MenuBarMetricView(frame: NSRect(x: 0, y: 0, width: 62, height: NSStatusBar.system.thickness))
         panel = PulsePanel(
             contentRect: NSRect(origin: .zero, size: Layout.panelSize),
             styleMask: [.borderless],
@@ -36,7 +127,7 @@ final class StatusBarController: NSObject {
         super.init()
 
         configurePanel()
-        configureButton()
+        configureStatusView()
         bindUpdates()
         updateStatusItem(snapshot: sampler.snapshot)
 
@@ -73,12 +164,12 @@ final class StatusBarController: NSObject {
         )
     }
 
-    private func configureButton() {
-        guard let button = statusItem.button else { return }
-        button.target = self
-        button.action = #selector(togglePanel(_:))
-        button.imagePosition = .imageLeading
-        button.toolTip = "PulseBar 系统状态"
+    private func configureStatusView() {
+        statusView.onClick = { [weak self] in
+            self?.togglePanelFromStatusItem()
+        }
+        statusView.toolTip = "PulseBar 系统状态"
+        statusItem.view = statusView
     }
 
     private func bindUpdates() {
@@ -115,44 +206,29 @@ final class StatusBarController: NSObject {
     }
 
     private func updateStatusItem(snapshot: SystemSnapshot) {
-        guard let button = statusItem.button else { return }
-
         let primaryKind = preferences.menuBarKind
         let reading = snapshot[primaryKind]
 
-        statusItem.length = preferences.showPercentLabels ? 62 : 28
-        button.image = NSImage(systemSymbolName: primaryKind.shortSymbolName, accessibilityDescription: primaryKind.title)
-        button.image?.isTemplate = true
-        button.title = preferences.showPercentLabels ? statusTitle(for: reading, kind: primaryKind) : ""
-        button.contentTintColor = .labelColor
+        let width = statusItemWidth(kind: primaryKind)
+        statusItem.length = width
+        statusView.update(kind: primaryKind, reading: reading, showsValue: preferences.showPercentLabels, width: width)
     }
 
-    private func statusTitle(for reading: MetricReading?, kind: MetricKind) -> String {
-        guard let reading else { return " --" }
-        switch kind {
-        case .network:
-            let cleaned = reading.primaryText
-                .replacingOccurrences(of: "/s", with: "")
-                .replacingOccurrences(of: " ", with: "")
-            return " \(cleaned.prefix(5))"
-        case .battery where reading.primaryText == "AC":
-            return " AC"
-        default:
-            return " \(MetricFormatter.compactPercent(reading.value))%"
-        }
+    private func statusItemWidth(kind: MetricKind) -> CGFloat {
+        guard preferences.showPercentLabels else { return 28 }
+        return kind == .network ? 76 : 62
     }
 
-    @objc private func togglePanel(_ sender: Any?) {
-        guard let button = statusItem.button else { return }
+    private func togglePanelFromStatusItem() {
         if panel.isVisible {
             closePanel()
         } else {
-            showPanel(relativeTo: button)
+            showPanel(relativeTo: statusView)
         }
     }
 
-    private func showPanel(relativeTo button: NSStatusBarButton) {
-        positionPanel(relativeTo: button)
+    private func showPanel(relativeTo anchorView: NSView) {
+        positionPanel(relativeTo: anchorView)
         panel.alphaValue = 0
         NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
@@ -169,8 +245,7 @@ final class StatusBarController: NSObject {
     }
 
     private func showPanelFromStatusItem() {
-        guard let button = statusItem.button else { return }
-        showPanel(relativeTo: button)
+        showPanel(relativeTo: statusView)
     }
 
     private func closePanel() {
@@ -178,13 +253,13 @@ final class StatusBarController: NSObject {
         panel.orderOut(nil)
     }
 
-    private func positionPanel(relativeTo button: NSStatusBarButton) {
-        let screen = button.window?.screen ?? NSScreen.main
+    private func positionPanel(relativeTo anchorView: NSView) {
+        let screen = anchorView.window?.screen ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         let panelSize = Layout.panelSize
 
-        let statusFrame = button.window.map { window in
-            window.convertToScreen(button.convert(button.bounds, to: nil))
+        let statusFrame = anchorView.window.map { window in
+            window.convertToScreen(anchorView.convert(anchorView.bounds, to: nil))
         }
 
         let anchorMaxX = statusFrame?.maxX ?? visibleFrame.maxX
