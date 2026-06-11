@@ -41,7 +41,7 @@ final class MenuBarMetricView: NSView {
 
         let bounds = self.bounds
         let iconName = kind.shortSymbolName
-        let iconSize: CGFloat = kind == .network && showsValue ? 15 : 14
+        let iconSize: CGFloat = kind == .network && showsValue ? 14 : 14
         let iconX: CGFloat = showsValue ? 6 : (bounds.width - iconSize) / 2
         let iconY = (bounds.height - iconSize) / 2
 
@@ -73,9 +73,9 @@ final class MenuBarMetricView: NSView {
         ]
 
         NSAttributedString(string: "↑ \(upload)", attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 17.1))
+            .draw(at: NSPoint(x: 25, y: 16.6))
         NSAttributedString(string: "↓ \(download)", attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 4.1))
+            .draw(at: NSPoint(x: 25, y: 4.6))
     }
 
     private func drawSingleValueText(in bounds: NSRect) {
@@ -216,7 +216,7 @@ final class StatusBarController: NSObject {
 
     private func statusItemWidth(kind: MetricKind) -> CGFloat {
         guard preferences.showPercentLabels else { return 28 }
-        return kind == .network ? 76 : 62
+        return kind == .network ? 78 : 62
     }
 
     private func togglePanelFromStatusItem() {
