@@ -13,6 +13,7 @@ final class MenuBarMetricView: NSView {
     private var kind: MetricKind = .memory
     private var reading: MetricReading?
     private var showsValue = true
+    private let menuBarForeground = NSColor(calibratedWhite: 0.02, alpha: 1)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -47,7 +48,7 @@ final class MenuBarMetricView: NSView {
 
         if let icon = NSImage(systemSymbolName: iconName, accessibilityDescription: kind.title) {
             icon.isTemplate = true
-            NSColor.labelColor.set()
+            menuBarForeground.set()
             icon.draw(in: NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize))
         }
 
@@ -68,14 +69,14 @@ final class MenuBarMetricView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 9.4, weight: .semibold),
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: menuBarForeground,
             .paragraphStyle: paragraph
         ]
 
         NSAttributedString(string: "↑ \(upload)", attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 16.6))
+            .draw(at: NSPoint(x: 25, y: 13.9))
         NSAttributedString(string: "↓ \(download)", attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 4.6))
+            .draw(at: NSPoint(x: 25, y: 2.1))
     }
 
     private func drawSingleValueText(in bounds: NSRect) {
@@ -88,7 +89,7 @@ final class MenuBarMetricView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: NSColor.labelColor
+            .foregroundColor: menuBarForeground
         ]
 
         NSAttributedString(string: text, attributes: attributes)
