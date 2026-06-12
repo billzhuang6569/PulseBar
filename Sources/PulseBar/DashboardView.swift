@@ -91,7 +91,7 @@ struct DashboardView: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("PulseBar")
+                Text("庄Sir的状态栏")
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
                 Text("实时 Mac 状态")
                     .font(.system(size: 11, weight: .medium))

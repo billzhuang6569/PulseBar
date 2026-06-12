@@ -115,7 +115,7 @@ final class StatusBarController: NSObject {
         self.preferences = preferences
         self.sampler = sampler
         statusItem = NSStatusBar.system.statusItem(withLength: 62)
-        statusItem.autosaveName = "PulseBarStatusItem"
+        statusItem.autosaveName = "ZhuangSirStatusBarItem"
         statusView = MenuBarMetricView(frame: NSRect(x: 0, y: 0, width: 62, height: NSStatusBar.system.thickness))
         panel = PulsePanel(
             contentRect: NSRect(origin: .zero, size: Layout.panelSize),
@@ -168,7 +168,7 @@ final class StatusBarController: NSObject {
         statusView.onClick = { [weak self] in
             self?.togglePanelFromStatusItem()
         }
-        statusView.toolTip = "PulseBar 系统状态"
+        statusView.toolTip = "庄Sir的状态栏"
         statusItem.view = statusView
     }
 
