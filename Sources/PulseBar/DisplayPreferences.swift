@@ -48,6 +48,10 @@ final class DisplayPreferences: ObservableObject {
         refreshInterval = savedRefresh > 0 ? savedRefresh : 2
         showPercentLabels = defaults.object(forKey: percentKey) as? Bool ?? true
         menuBarKind = defaults.string(forKey: menuBarKindKey).flatMap(MetricKind.init(rawValue:)) ?? .memory
+
+        if !enabledKinds.contains(menuBarKind) {
+            menuBarKind = enabledKinds.sortedByDisplayOrder.first ?? .memory
+        }
     }
 
     func isEnabled(_ kind: MetricKind) -> Bool {
@@ -57,8 +61,12 @@ final class DisplayPreferences: ObservableObject {
     func set(_ kind: MetricKind, enabled: Bool) {
         if enabled {
             enabledKinds.insert(kind)
+            menuBarKind = kind
         } else {
             enabledKinds.remove(kind)
+            if menuBarKind == kind {
+                menuBarKind = enabledKinds.sortedByDisplayOrder.first ?? .memory
+            }
         }
     }
 
@@ -67,5 +75,11 @@ final class DisplayPreferences: ObservableObject {
         defaults.set(refreshInterval, forKey: refreshKey)
         defaults.set(showPercentLabels, forKey: percentKey)
         defaults.set(menuBarKind.rawValue, forKey: menuBarKindKey)
+    }
+}
+
+private extension Set where Element == MetricKind {
+    var sortedByDisplayOrder: [MetricKind] {
+        MetricKind.allCases.filter { contains($0) }
     }
 }

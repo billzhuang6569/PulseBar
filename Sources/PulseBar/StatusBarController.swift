@@ -99,7 +99,7 @@ final class MenuBarMetricView: NSView {
 
 final class StatusBarController: NSObject {
     private enum Layout {
-        static let panelSize = NSSize(width: 348, height: 480)
+        static let panelSize = NSSize(width: 340, height: 462)
         static let screenMargin: CGFloat = 10
         static let menuBarGap: CGFloat = 22
     }
