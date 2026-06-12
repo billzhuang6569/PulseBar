@@ -12,6 +12,6 @@
 
 ## 安装
 
-下载 `庄Sir的状态栏-0.3.0.zip`，解压后双击 `庄Sir的状态栏.app`。
+下载 GitHub 附件 `ZhuangSir-StatusBar-0.3.0.zip`，解压后双击 `庄Sir的状态栏.app`。
 
 如果 macOS 第一次提示无法确认开发者，请右键点击 `庄Sir的状态栏.app`，选择“打开”。
