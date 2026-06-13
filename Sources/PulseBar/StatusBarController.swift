@@ -51,9 +51,7 @@ final class MenuBarMetricView: NSView {
         let iconY = (bounds.height - iconSize) / 2
         let foreground = adaptiveMenuBarForeground()
 
-        if let icon = NSImage(systemSymbolName: iconName, accessibilityDescription: kind.title) {
-            icon.isTemplate = true
-            foreground.set()
+        if let icon = tintedStatusIcon(named: iconName, accessibilityDescription: kind.title, color: foreground) {
             icon.draw(in: NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize))
         }
 
@@ -78,6 +76,21 @@ final class MenuBarMetricView: NSView {
         default:
             return NSColor.labelColor
         }
+    }
+
+    private func tintedStatusIcon(named name: String, accessibilityDescription: String, color: NSColor) -> NSImage? {
+        guard let source = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription),
+              let image = source.copy() as? NSImage
+        else {
+            return nil
+        }
+
+        image.isTemplate = false
+        image.lockFocus()
+        color.set()
+        NSRect(origin: .zero, size: image.size).fill(using: .sourceAtop)
+        image.unlockFocus()
+        return image
     }
 
     private func drawNetworkText(in bounds: NSRect, foreground: NSColor) {
