@@ -13,7 +13,6 @@ final class MenuBarMetricView: NSView {
     private var kind: MetricKind = .memory
     private var reading: MetricReading?
     private var showsValue = true
-    private let menuBarForeground = NSColor(calibratedWhite: 0.02, alpha: 1)
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -23,6 +22,11 @@ final class MenuBarMetricView: NSView {
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         wantsLayer = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 
     func update(kind: MetricKind, reading: MetricReading?, showsValue: Bool, width: CGFloat) {
@@ -45,23 +49,38 @@ final class MenuBarMetricView: NSView {
         let iconSize: CGFloat = kind == .network && showsValue ? 14 : 14
         let iconX: CGFloat = showsValue ? 6 : (bounds.width - iconSize) / 2
         let iconY = (bounds.height - iconSize) / 2
+        let foreground = adaptiveMenuBarForeground()
 
         if let icon = NSImage(systemSymbolName: iconName, accessibilityDescription: kind.title) {
             icon.isTemplate = true
-            menuBarForeground.set()
+            foreground.set()
             icon.draw(in: NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize))
         }
 
         guard showsValue else { return }
 
         if kind == .network {
-            drawNetworkText(in: bounds)
+            drawNetworkText(in: bounds, foreground: foreground)
         } else {
-            drawSingleValueText(in: bounds)
+            drawSingleValueText(in: bounds, foreground: foreground)
         }
     }
 
-    private func drawNetworkText(in bounds: NSRect) {
+    private func adaptiveMenuBarForeground() -> NSColor {
+        let appearance = effectiveAppearance
+        let match = appearance.bestMatch(from: [.darkAqua, .aqua, .vibrantDark, .vibrantLight])
+
+        switch match {
+        case .darkAqua, .vibrantDark:
+            return NSColor.white
+        case .aqua, .vibrantLight:
+            return NSColor(calibratedWhite: 0.02, alpha: 1)
+        default:
+            return NSColor.labelColor
+        }
+    }
+
+    private func drawNetworkText(in bounds: NSRect, foreground: NSColor) {
         let upload = MetricFormatter.compactSpeed(reading?.uploadBytesPerSecond ?? 0)
         let download = MetricFormatter.compactSpeed(reading?.downloadBytesPerSecond ?? 0)
         let paragraph = NSMutableParagraphStyle()
@@ -69,7 +88,7 @@ final class MenuBarMetricView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 9.4, weight: .semibold),
-            .foregroundColor: menuBarForeground,
+            .foregroundColor: foreground,
             .paragraphStyle: paragraph
         ]
 
@@ -79,7 +98,7 @@ final class MenuBarMetricView: NSView {
             .draw(at: NSPoint(x: 25, y: 2.1))
     }
 
-    private func drawSingleValueText(in bounds: NSRect) {
+    private func drawSingleValueText(in bounds: NSRect, foreground: NSColor) {
         let text: String
         if kind == .battery, reading?.primaryText == "AC" {
             text = "AC"
@@ -89,7 +108,7 @@ final class MenuBarMetricView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: menuBarForeground
+            .foregroundColor: foreground
         ]
 
         NSAttributedString(string: text, attributes: attributes)
