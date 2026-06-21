@@ -46,7 +46,7 @@ final class MenuBarMetricView: NSView {
 
         let bounds = self.bounds
         let iconName = kind.shortSymbolName
-        let iconSize: CGFloat = kind == .network && showsValue ? 14 : 14
+        let iconSize: CGFloat = kind == .network && showsValue ? 13 : 13
         let iconX: CGFloat = showsValue ? 6 : (bounds.width - iconSize) / 2
         let iconY = (bounds.height - iconSize) / 2
         let foreground = adaptiveMenuBarForeground()
@@ -79,17 +79,18 @@ final class MenuBarMetricView: NSView {
     }
 
     private func tintedStatusIcon(named name: String, accessibilityDescription: String, color: NSColor) -> NSImage? {
-        guard let source = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription),
-              let image = source.copy() as? NSImage
-        else {
+        guard let source = NSImage(systemSymbolName: name, accessibilityDescription: accessibilityDescription) else {
             return nil
         }
 
-        image.isTemplate = false
+        let image = NSImage(size: source.size)
         image.lockFocus()
+        let sourceRect = NSRect(origin: .zero, size: source.size)
+        source.draw(in: sourceRect, from: sourceRect, operation: .sourceOver, fraction: 1)
         color.set()
-        NSRect(origin: .zero, size: image.size).fill(using: .sourceAtop)
+        sourceRect.fill(using: .sourceIn)
         image.unlockFocus()
+        image.isTemplate = false
         return image
     }
 
@@ -100,15 +101,15 @@ final class MenuBarMetricView: NSView {
         paragraph.alignment = .left
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 9.4, weight: .semibold),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 8.6, weight: .semibold),
             .foregroundColor: foreground,
             .paragraphStyle: paragraph
         ]
 
         NSAttributedString(string: "↑ \(upload)", attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 13.9))
+            .draw(at: NSPoint(x: 24, y: 14.4))
         NSAttributedString(string: "↓ \(download)", attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 2.1))
+            .draw(at: NSPoint(x: 24, y: 3.0))
     }
 
     private func drawSingleValueText(in bounds: NSRect, foreground: NSColor) {
@@ -120,29 +121,33 @@ final class MenuBarMetricView: NSView {
         }
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
             .foregroundColor: foreground
         ]
 
         NSAttributedString(string: text, attributes: attributes)
-            .draw(at: NSPoint(x: 25, y: 8.7))
+            .draw(at: NSPoint(x: 24, y: 9.2))
     }
 }
 
 final class StatusBarController: NSObject {
     private enum Layout {
         static let panelSize = NSSize(width: 340, height: 462)
+        static let detailPanelSize = NSSize(width: 286, height: 360)
         static let screenMargin: CGFloat = 10
         static let menuBarGap: CGFloat = 22
+        static let detailGap: CGFloat = 8
     }
 
     private let statusItem: NSStatusItem
     private let statusView: MenuBarMetricView
     private let panel: NSPanel
+    private let detailPanel: NSPanel
     private let preferences: DisplayPreferences
     private let sampler: MetricsSampler
     private var cancellables = Set<AnyCancellable>()
     private var outsideClickMonitor: Any?
+    private var selectedDetailKind: MetricKind?
 
     init(preferences: DisplayPreferences, sampler: MetricsSampler) {
         self.preferences = preferences
@@ -156,10 +161,17 @@ final class StatusBarController: NSObject {
             backing: .buffered,
             defer: false
         )
+        detailPanel = PulsePanel(
+            contentRect: NSRect(origin: .zero, size: Layout.detailPanelSize),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
 
         super.init()
 
         configurePanel()
+        configureDetailPanel()
         configureStatusView()
         bindUpdates()
         updateStatusItem(snapshot: sampler.snapshot)
@@ -175,6 +187,7 @@ final class StatusBarController: NSObject {
         cancellables.removeAll()
         removeOutsideClickMonitor()
         panel.orderOut(nil)
+        detailPanel.orderOut(nil)
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 
@@ -193,8 +206,26 @@ final class StatusBarController: NSObject {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.contentViewController = NSHostingController(
-            rootView: DashboardView(preferences: preferences, sampler: sampler)
+            rootView: DashboardView(preferences: preferences, sampler: sampler) { [weak self] kind in
+                self?.setDetailKind(kind)
+            }
         )
+    }
+
+    private func configureDetailPanel() {
+        detailPanel.titleVisibility = .hidden
+        detailPanel.isMovableByWindowBackground = false
+        detailPanel.isReleasedWhenClosed = false
+        detailPanel.isFloatingPanel = true
+        detailPanel.hidesOnDeactivate = false
+        detailPanel.level = .statusBar
+        detailPanel.backgroundColor = .clear
+        detailPanel.isOpaque = false
+        detailPanel.hasShadow = true
+        detailPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        detailPanel.standardWindowButton(.closeButton)?.isHidden = true
+        detailPanel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        detailPanel.standardWindowButton(.zoomButton)?.isHidden = true
     }
 
     private func configureStatusView() {
@@ -249,7 +280,7 @@ final class StatusBarController: NSObject {
 
     private func statusItemWidth(kind: MetricKind) -> CGFloat {
         guard preferences.showPercentLabels else { return 28 }
-        return kind == .network ? 78 : 62
+        return kind == .network ? 74 : 58
     }
 
     private func togglePanelFromStatusItem() {
@@ -284,6 +315,8 @@ final class StatusBarController: NSObject {
     private func closePanel() {
         removeOutsideClickMonitor()
         panel.orderOut(nil)
+        detailPanel.orderOut(nil)
+        selectedDetailKind = nil
     }
 
     private func positionPanel(relativeTo anchorView: NSView) {
@@ -310,6 +343,53 @@ final class StatusBarController: NSObject {
         )
 
         panel.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
+    }
+
+    private func setDetailKind(_ kind: MetricKind?) {
+        guard panel.isVisible else { return }
+
+        guard let kind else {
+            selectedDetailKind = nil
+            detailPanel.orderOut(nil)
+            return
+        }
+
+        selectedDetailKind = kind
+        detailPanel.contentViewController = NSHostingController(
+            rootView: MetricDetailPanelView(kind: kind, sampler: sampler)
+        )
+        positionDetailPanel()
+        detailPanel.alphaValue = 0
+        detailPanel.orderFrontRegardless()
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.10
+            detailPanel.animator().alphaValue = 1
+        }
+    }
+
+    private func positionDetailPanel() {
+        let screen = panel.screen ?? NSScreen.main
+        let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        let detailSize = Layout.detailPanelSize
+        let panelFrame = panel.frame
+
+        let rightX = panelFrame.maxX + Layout.detailGap
+        let leftX = panelFrame.minX - detailSize.width - Layout.detailGap
+        let hasRightSpace = rightX + detailSize.width + Layout.screenMargin <= visibleFrame.maxX
+        let idealX = hasRightSpace ? rightX : leftX
+        let x = min(
+            max(idealX, visibleFrame.minX + Layout.screenMargin),
+            visibleFrame.maxX - detailSize.width - Layout.screenMargin
+        )
+
+        let idealY = panelFrame.maxY - detailSize.height
+        let y = min(
+            max(idealY, visibleFrame.minY + Layout.screenMargin),
+            visibleFrame.maxY - detailSize.height - Layout.menuBarGap
+        )
+
+        detailPanel.setFrame(NSRect(x: x, y: y, width: detailSize.width, height: detailSize.height), display: true)
     }
 
     private func installOutsideClickMonitor() {

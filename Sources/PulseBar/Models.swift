@@ -101,3 +101,20 @@ struct SystemSnapshot: Equatable {
         readings[kind]
     }
 }
+
+struct MetricDetailRow: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let subtitle: String
+    let primaryValue: String
+    let secondaryValue: String
+    let numericValue: Double
+}
+
+struct MetricDetailSnapshot: Equatable {
+    let kind: MetricKind
+    let summary: String
+    let rows: [MetricDetailRow]
+    let capturedAt: Date
+    let note: String?
+}

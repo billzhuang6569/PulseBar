@@ -4,6 +4,9 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var preferences: DisplayPreferences
     @ObservedObject var sampler: MetricsSampler
+    var onSelectDetail: (MetricKind?) -> Void = { _ in }
+    @State private var selectedDetailKind: MetricKind?
+    @State private var carouselIndex = 0
 
     private var visibleReadings: [MetricReading] {
         MetricKind.allCases.compactMap { kind in
@@ -46,15 +49,7 @@ struct DashboardView: View {
                 header
                 pressurePanel
                 signalStrip
-
-                ScrollView(showsIndicators: false) {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                        ForEach(visibleReadings) { reading in
-                            MetricTile(reading: reading)
-                        }
-                    }
-                    .padding(.vertical, 1)
-                }
+                metricCarousel
 
                 settingsPanel
                 footer
@@ -67,6 +62,59 @@ struct DashboardView: View {
         }
         .onChange(of: preferences.refreshInterval) { _, newValue in
             sampler.start(interval: newValue)
+        }
+    }
+
+    private var metricCarousel: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(visibleReadings.enumerated()), id: \.element.id) { index, reading in
+                        MetricTile(reading: reading, isSelected: selectedDetailKind == reading.kind) {
+                            let nextSelection = selectedDetailKind == reading.kind ? nil : reading.kind
+                            selectedDetailKind = nextSelection
+                            onSelectDetail(nextSelection)
+                            carouselIndex = index
+                        }
+                        .id(reading.kind.id)
+                    }
+                }
+                .padding(.vertical, 1)
+                .padding(.horizontal, 1)
+            }
+            .frame(height: 174)
+            .overlay(alignment: .leading) {
+                if carouselIndex > 0 {
+                    CarouselArrow(systemName: "chevron.left") {
+                        moveCarousel(by: -1, proxy: proxy)
+                    }
+                    .padding(.leading, 2)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if carouselIndex < max(visibleReadings.count - 1, 0) {
+                    CarouselArrow(systemName: "chevron.right") {
+                        moveCarousel(by: 1, proxy: proxy)
+                    }
+                    .padding(.trailing, 2)
+                }
+            }
+        }
+        .onChange(of: preferences.enabledKinds) { _, _ in
+            if let selectedDetailKind, !preferences.isEnabled(selectedDetailKind) {
+                self.selectedDetailKind = nil
+                onSelectDetail(nil)
+            }
+            carouselIndex = min(carouselIndex, max(visibleReadings.count - 1, 0))
+        }
+    }
+
+    private func moveCarousel(by delta: Int, proxy: ScrollViewProxy) {
+        guard !visibleReadings.isEmpty else { return }
+        let nextIndex = min(max(carouselIndex + delta, 0), visibleReadings.count - 1)
+        carouselIndex = nextIndex
+        withAnimation(.snappy(duration: 0.22)) {
+            proxy.scrollTo(visibleReadings[nextIndex].kind.id, anchor: .center)
         }
     }
 
@@ -321,52 +369,259 @@ private struct MiniSwitch: View {
 
 private struct MetricTile: View {
     let reading: MetricReading
+    let isSelected: Bool
+    let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .center, spacing: 6) {
-                Image(systemName: reading.kind.symbolName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(reading.kind.tint)
-                    .frame(width: 17)
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 6) {
+                    Image(systemName: reading.kind.symbolName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(reading.kind.tint)
+                        .frame(width: 17)
 
-                Text(reading.kind.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    Text(reading.kind.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(DashboardTheme.primaryText)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(isSelected ? reading.kind.tint : DashboardTheme.tertiaryText)
+                }
+
+                Text(reading.primaryText)
+                    .font(.system(size: 23, weight: .semibold, design: .rounded))
                     .foregroundStyle(DashboardTheme.primaryText)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
 
-                Spacer()
+                ProgressView(value: reading.value, total: 100)
+                    .tint(reading.kind.tint)
+                    .controlSize(.small)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(reading.secondaryText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(DashboardTheme.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    Text(reading.detailText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(DashboardTheme.tertiaryText)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                }
+            }
+            .frame(width: 156, height: 150, alignment: .top)
+            .padding(10)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .background(DashboardTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isSelected ? reading.kind.tint.opacity(0.9) : DashboardTheme.stroke, lineWidth: isSelected ? 1.4 : 1)
+        }
+    }
+}
+
+private struct CarouselArrow: View {
+    let systemName: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(DashboardTheme.primaryText)
+                .frame(width: 30, height: 46)
+                .background(.black.opacity(0.42), in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(DashboardTheme.stroke, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+    }
+}
+
+struct MetricDetailPanelView: View {
+    let kind: MetricKind
+    @ObservedObject var sampler: MetricsSampler
+    @StateObject private var viewModel = MetricDetailViewModel()
+
+    var body: some View {
+        ZStack {
+            DashboardTheme.backgroundGradient
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: kind.symbolName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(kind.tint)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(kind.title)详情")
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundStyle(DashboardTheme.primaryText)
+                        Text(viewModel.snapshot?.summary ?? "正在读取")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(DashboardTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(viewModel.snapshot?.capturedAt ?? Date(), style: .time)
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(DashboardTheme.tertiaryText)
+                }
+
+                ScrollView(showsIndicators: false) {
+                    if let snapshot = viewModel.snapshot {
+                        DetailRows(snapshot: snapshot)
+                    } else {
+                        VStack(spacing: 8) {
+                            ForEach(0..<5, id: \.self) { _ in
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(DashboardTheme.surfaceRaised)
+                                    .frame(height: 34)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+        }
+        .frame(width: 286, height: 360)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onAppear {
+            viewModel.start(kind: kind, sampler: sampler)
+        }
+        .onChange(of: kind) { _, newKind in
+            viewModel.start(kind: newKind, sampler: sampler)
+        }
+        .onDisappear {
+            viewModel.stop()
+        }
+    }
+}
+
+private struct DetailRows: View {
+    let snapshot: MetricDetailSnapshot
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if snapshot.rows.isEmpty {
+                Text("暂时没有可展示的明细")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(DashboardTheme.secondaryText)
+                    .frame(maxWidth: .infinity, minHeight: 140)
+                    .background(DashboardTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                ForEach(snapshot.rows) { row in
+                    DetailRowView(row: row, tint: snapshot.kind.tint)
+                }
             }
 
-            Text(reading.primaryText)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
-                .foregroundStyle(DashboardTheme.primaryText)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-            ProgressView(value: reading.value, total: 100)
-                .tint(reading.kind.tint)
-                .controlSize(.small)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(reading.secondaryText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(DashboardTheme.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                Text(reading.detailText)
-                    .font(.system(size: 10))
+            if let note = snapshot.note {
+                Text(note)
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(DashboardTheme.tertiaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
             }
         }
-        .frame(minHeight: 96, alignment: .top)
-        .padding(10)
-        .background(DashboardTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+private struct DetailRowView: View {
+    let row: MetricDetailRow
+    let tint: Color
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DashboardTheme.primaryText)
+                    .lineLimit(1)
+                Text(row.subtitle)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(DashboardTheme.tertiaryText)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(row.primaryValue)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(DashboardTheme.primaryText)
+                Text(row.secondaryValue)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(DashboardTheme.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(DashboardTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(DashboardTheme.stroke, lineWidth: 1)
+        }
+    }
+}
+
+@MainActor
+private final class MetricDetailViewModel: ObservableObject {
+    @Published var snapshot: MetricDetailSnapshot?
+
+    private let provider = ProcessDetailProvider()
+    private var timer: Timer?
+    private weak var sampler: MetricsSampler?
+    private var kind: MetricKind = .memory
+
+    func start(kind: MetricKind, sampler: MetricsSampler) {
+        stop()
+        self.kind = kind
+        self.sampler = sampler
+        refresh()
+        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh()
+            }
+        }
+        if let timer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func refresh() {
+        let kind = self.kind
+        let reading = sampler?.snapshot[kind]
+        Task.detached(priority: .utility) { [provider] in
+            let snapshot = provider.snapshot(for: kind, reading: reading)
+            await MainActor.run {
+                self.snapshot = snapshot
+            }
         }
     }
 }
