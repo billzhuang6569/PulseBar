@@ -644,7 +644,7 @@ private struct PanelButtonStyle: ButtonStyle {
 
 private enum DashboardLayout {
     static let width: CGFloat = 340
-    static let height: CGFloat = 462
+    static let height: CGFloat = 560
 }
 
 private enum DashboardTheme {
