@@ -535,7 +535,11 @@ private struct DetailRows: View {
                     .background(DashboardTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 ForEach(snapshot.rows) { row in
-                    DetailRowView(row: row, tint: snapshot.kind.tint)
+                    if snapshot.kind == .network {
+                        NetworkDetailRowView(row: row, tint: snapshot.kind.tint)
+                    } else {
+                        DetailRowView(row: row, tint: snapshot.kind.tint)
+                    }
                 }
             }
 
@@ -546,6 +550,56 @@ private struct DetailRows: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
             }
+        }
+    }
+}
+
+private struct NetworkDetailRowView: View {
+    let row: MetricDetailRow
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Circle()
+                    .fill(tint)
+                    .frame(width: 7, height: 7)
+
+                Text(row.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(DashboardTheme.primaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                Text(row.primaryValue)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(DashboardTheme.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+
+            HStack(spacing: 8) {
+                Text(row.secondaryValue)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(DashboardTheme.secondaryText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                Text(row.subtitle)
+                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                    .foregroundStyle(DashboardTheme.tertiaryText)
+                    .lineLimit(1)
+            }
+            .padding(.leading, 15)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 8)
+        .background(DashboardTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(DashboardTheme.stroke, lineWidth: 1)
         }
     }
 }

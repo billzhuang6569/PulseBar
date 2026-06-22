@@ -109,8 +109,8 @@ final class ProcessDetailProvider {
                     id: "network-\(key)",
                     name: item.name,
                     subtitle: item.pid > 0 ? "PID \(item.pid)" : "进程",
-                    primaryValue: total > 0 ? "\(MetricFormatter.speed(total))/s" : MetricFormatter.bytes(fallbackTotal),
-                    secondaryValue: "↓ \(MetricFormatter.speed(down))/s  ↑ \(MetricFormatter.speed(up))/s",
+                    primaryValue: "↓ \(MetricFormatter.speed(down))  ↑ \(MetricFormatter.speed(up))",
+                    secondaryValue: "累计 \(MetricFormatter.bytes(fallbackTotal))",
                     numericValue: total > 0 ? total : fallbackTotal
                 )
             )

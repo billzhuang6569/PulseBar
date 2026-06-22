@@ -10,6 +10,8 @@ enum MetricFormatter {
     }
 
     static func bytes(_ bytes: Double) -> String {
+        guard bytes >= 1 else { return "0KB" }
+
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useKB, .useMB, .useGB, .useTB]
         formatter.countStyle = .file

@@ -67,8 +67,8 @@ final class SystemMetricsProvider {
             return MetricReading(
                 kind: .network,
                 value: 0,
-                primaryText: "0/s",
-                secondaryText: "↓ 0/s  ↑ 0/s",
+                primaryText: "0KB/s",
+                secondaryText: "↓ 0KB/s  ↑ 0KB/s",
                 detailText: "正在建立网速基线",
                 uploadBytesPerSecond: 0,
                 downloadBytesPerSecond: 0
