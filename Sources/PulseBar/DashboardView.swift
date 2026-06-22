@@ -43,7 +43,6 @@ struct DashboardView: View {
     var body: some View {
         ZStack {
             DashboardTheme.backgroundGradient
-                .ignoresSafeArea()
 
             VStack(spacing: 8) {
                 header
@@ -54,9 +53,14 @@ struct DashboardView: View {
                 settingsPanel
                 footer
             }
-            .padding(10)
+            .padding(12)
         }
         .frame(width: DashboardLayout.width, height: DashboardLayout.height)
+        .clipShape(RoundedRectangle(cornerRadius: DashboardLayout.panelCornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: DashboardLayout.panelCornerRadius, style: .continuous)
+                .stroke(DashboardTheme.windowStroke, lineWidth: 1)
+        }
         .onAppear {
             sampler.start(interval: preferences.refreshInterval)
         }
@@ -502,6 +506,10 @@ struct MetricDetailPanelView: View {
         }
         .frame(width: 286, height: 360)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(DashboardTheme.windowStroke, lineWidth: 1)
+        }
         .onAppear {
             viewModel.start(kind: kind, sampler: sampler)
         }
@@ -645,6 +653,7 @@ private struct PanelButtonStyle: ButtonStyle {
 private enum DashboardLayout {
     static let width: CGFloat = 340
     static let height: CGFloat = 560
+    static let panelCornerRadius: CGFloat = 20
 }
 
 private enum DashboardTheme {
@@ -658,6 +667,7 @@ private enum DashboardTheme {
     static let disabledSurface = Color(red: 0.075, green: 0.082, blue: 0.08)
     static let pillBackground = Color(red: 0.12, green: 0.16, blue: 0.145)
     static let stroke = Color.white.opacity(0.075)
+    static let windowStroke = Color.white.opacity(0.12)
     static let track = Color.white.opacity(0.10)
     static let switchOff = Color.white.opacity(0.13)
 

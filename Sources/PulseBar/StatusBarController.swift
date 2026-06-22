@@ -134,6 +134,8 @@ final class StatusBarController: NSObject {
     private enum Layout {
         static let panelSize = NSSize(width: 340, height: 560)
         static let detailPanelSize = NSSize(width: 286, height: 360)
+        static let panelCornerRadius: CGFloat = 20
+        static let detailPanelCornerRadius: CGFloat = 16
         static let screenMargin: CGFloat = 10
         static let menuBarGap: CGFloat = 22
         static let detailGap: CGFloat = 8
@@ -210,6 +212,7 @@ final class StatusBarController: NSObject {
                 self?.setDetailKind(kind)
             }
         )
+        applyRoundedContentMask(to: panel, radius: Layout.panelCornerRadius)
     }
 
     private func configureDetailPanel() {
@@ -226,6 +229,15 @@ final class StatusBarController: NSObject {
         detailPanel.standardWindowButton(.closeButton)?.isHidden = true
         detailPanel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         detailPanel.standardWindowButton(.zoomButton)?.isHidden = true
+        applyRoundedContentMask(to: detailPanel, radius: Layout.detailPanelCornerRadius)
+    }
+
+    private func applyRoundedContentMask(to panel: NSPanel, radius: CGFloat) {
+        panel.contentView?.wantsLayer = true
+        panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.contentView?.layer?.cornerRadius = radius
+        panel.contentView?.layer?.cornerCurve = .continuous
+        panel.contentView?.layer?.masksToBounds = true
     }
 
     private func configureStatusView() {
