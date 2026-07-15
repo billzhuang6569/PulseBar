@@ -1,8 +1,6 @@
 import Foundation
 
 final class ProcessDetailProvider {
-    private var previousNetworkRows: [String: (received: Double, sent: Double, date: Date)] = [:]
-
     func snapshot(for kind: MetricKind, reading: MetricReading?) -> MetricDetailSnapshot {
         switch kind {
         case .memory:
@@ -93,34 +91,22 @@ final class ProcessDetailProvider {
     private func networkSnapshot(reading: MetricReading?) -> MetricDetailSnapshot {
         let now = Date()
         let current = nettopRows()
-        var rows: [MetricDetailRow] = []
-
-        for item in current {
+        let rows = current.map { item in
             let key = "\(item.name)-\(item.pid)"
-            let previous = previousNetworkRows[key]
-            let interval = max(now.timeIntervalSince(previous?.date ?? now), 0.5)
-            let down = max(item.received - (previous?.received ?? item.received), 0) / interval
-            let up = max(item.sent - (previous?.sent ?? item.sent), 0) / interval
+            let down = item.receivedPerSecond
+            let up = item.sentPerSecond
             let total = down + up
-            let fallbackTotal = item.received + item.sent
+            let cumulativeTotal = item.totalReceived + item.totalSent
 
-            rows.append(
-                MetricDetailRow(
-                    id: "network-\(key)",
-                    name: item.name,
-                    subtitle: item.pid > 0 ? "PID \(item.pid)" : "进程",
-                    primaryValue: "↓ \(MetricFormatter.speed(down))  ↑ \(MetricFormatter.speed(up))",
-                    secondaryValue: "累计 \(MetricFormatter.bytes(fallbackTotal))",
-                    numericValue: total > 0 ? total : fallbackTotal
-                )
+            return MetricDetailRow(
+                id: "network-\(key)",
+                name: item.name,
+                subtitle: item.pid > 0 ? "PID \(item.pid)" : "进程",
+                primaryValue: "↓ \(MetricFormatter.speed(down))  ↑ \(MetricFormatter.speed(up))",
+                secondaryValue: "累计 \(MetricFormatter.bytes(cumulativeTotal))",
+                numericValue: total
             )
         }
-
-        previousNetworkRows = Dictionary(
-            uniqueKeysWithValues: current.map {
-                ("\($0.name)-\($0.pid)", ($0.received, $0.sent, now))
-            }
-        )
 
         let sortedRows = rows
             .sorted { $0.numericValue > $1.numericValue }
@@ -131,7 +117,7 @@ final class ProcessDetailProvider {
             summary: reading?.secondaryText ?? "网速排行",
             rows: Array(sortedRows),
             capturedAt: now,
-            note: "首次打开时可能先显示累计流量，下一次刷新后显示实时速率"
+            note: "按当前上下行合计速度排序；累计流量为进程自启动以来的收发总量"
         )
     }
 
@@ -178,8 +164,10 @@ final class ProcessDetailProvider {
     private struct NetworkRow {
         let pid: Int
         let name: String
-        let received: Double
-        let sent: Double
+        let receivedPerSecond: Double
+        let sentPerSecond: Double
+        let totalReceived: Double
+        let totalSent: Double
     }
 
     private func processRows() -> [ProcessRow] {
@@ -205,29 +193,21 @@ final class ProcessDetailProvider {
     }
 
     private func nettopRows() -> [NetworkRow] {
-        let output = runCommand("/usr/bin/nettop", arguments: ["-P", "-L", "1", "-x", "-J", "bytes_in,bytes_out"])
-        return output.split(separator: "\n").compactMap { line in
-            let fields = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
-            guard fields.count >= 3, fields[0] != "" else { return nil }
+        let output = runCommand(
+            "/usr/bin/nettop",
+            arguments: ["-d", "-P", "-L", "2", "-s", "1", "-x", "-J", "bytes_in,bytes_out"]
+        )
 
-            let process = fields[0]
-            let processParts = process.split(separator: ".")
-            let pid = processParts.last.flatMap { Int($0) } ?? 0
-            let name: String
-            if processParts.count > 1 {
-                name = processParts.dropLast().joined(separator: ".")
-            } else {
-                name = process
-            }
-
-            return NetworkRow(
-                pid: pid,
-                name: name,
-                received: Double(fields[1]) ?? 0,
-                sent: Double(fields[2]) ?? 0
+        return NettopSampleParser.processTraffic(from: output).map { sample in
+            NetworkRow(
+                pid: sample.pid,
+                name: sample.name,
+                receivedPerSecond: sample.receivedPerSecond,
+                sentPerSecond: sample.sentPerSecond,
+                totalReceived: sample.totalReceived,
+                totalSent: sample.totalSent
             )
         }
-        .filter { $0.received + $0.sent > 0 }
     }
 
     private func folderSize(_ url: URL) -> UInt64 {
@@ -268,5 +248,94 @@ final class ProcessDetailProvider {
         } catch {
             return ""
         }
+    }
+}
+
+struct NettopProcessTraffic: Equatable {
+    let pid: Int
+    let name: String
+    let receivedPerSecond: Double
+    let sentPerSecond: Double
+    let totalReceived: Double
+    let totalSent: Double
+}
+
+enum NettopSampleParser {
+    private struct RawRow {
+        let pid: Int
+        let name: String
+        let received: Double
+        let sent: Double
+    }
+
+    static func processTraffic(from output: String) -> [NettopProcessTraffic] {
+        let samples = parseSamples(output)
+        guard samples.count >= 2, let totals = samples.first, let deltas = samples.last else {
+            return []
+        }
+
+        return deltas.values.compactMap { delta in
+            let speed = delta.received + delta.sent
+            guard speed > 0 else { return nil }
+
+            let key = processKey(name: delta.name, pid: delta.pid)
+            let total = totals[key]
+            return NettopProcessTraffic(
+                pid: delta.pid,
+                name: delta.name,
+                receivedPerSecond: delta.received,
+                sentPerSecond: delta.sent,
+                totalReceived: total?.received ?? 0,
+                totalSent: total?.sent ?? 0
+            )
+        }
+    }
+
+    private static func parseSamples(_ output: String) -> [[String: RawRow]] {
+        var samples: [[String: RawRow]] = []
+        var current: [String: RawRow] = [:]
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            let fields = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            guard fields.count >= 3 else { continue }
+
+            if fields[0].isEmpty {
+                if !current.isEmpty {
+                    samples.append(current)
+                    current.removeAll(keepingCapacity: true)
+                }
+                continue
+            }
+
+            guard let row = parseRow(fields) else { continue }
+            current[processKey(name: row.name, pid: row.pid)] = row
+        }
+
+        if !current.isEmpty {
+            samples.append(current)
+        }
+        return samples
+    }
+
+    private static func parseRow(_ fields: [String]) -> RawRow? {
+        let process = fields[0]
+        let processParts = process.split(separator: ".")
+        let pid = processParts.last.flatMap { Int($0) } ?? 0
+        let name = processParts.count > 1
+            ? processParts.dropLast().joined(separator: ".")
+            : process
+
+        guard !name.isEmpty,
+              let received = Double(fields[1]),
+              let sent = Double(fields[2])
+        else {
+            return nil
+        }
+
+        return RawRow(pid: pid, name: name, received: received, sent: sent)
+    }
+
+    private static func processKey(name: String, pid: Int) -> String {
+        "\(name)-\(pid)"
     }
 }

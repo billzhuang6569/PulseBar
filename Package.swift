@@ -14,6 +14,11 @@ let package = Package(
         .executableTarget(
             name: "PulseBar",
             path: "Sources/PulseBar"
+        ),
+        .testTarget(
+            name: "PulseBarTests",
+            dependencies: ["PulseBar"],
+            path: "Tests/PulseBarTests"
         )
     ]
 )

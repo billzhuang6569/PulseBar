@@ -528,7 +528,7 @@ private struct DetailRows: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if snapshot.rows.isEmpty {
-                Text("暂时没有可展示的明细")
+                Text(snapshot.kind == .network ? "当前采样周期没有进程使用网络" : "暂时没有可展示的明细")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(DashboardTheme.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 140)
@@ -655,9 +655,12 @@ private final class MetricDetailViewModel: ObservableObject {
     private var timer: Timer?
     private weak var sampler: MetricsSampler?
     private var kind: MetricKind = .memory
+    private var generation = 0
+    private var isRefreshing = false
 
     func start(kind: MetricKind, sampler: MetricsSampler) {
         stop()
+        generation += 1
         self.kind = kind
         self.sampler = sampler
         refresh()
@@ -672,16 +675,23 @@ private final class MetricDetailViewModel: ObservableObject {
     }
 
     func stop() {
+        generation += 1
+        isRefreshing = false
         timer?.invalidate()
         timer = nil
     }
 
     private func refresh() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
         let kind = self.kind
         let reading = sampler?.snapshot[kind]
+        let generation = self.generation
         Task.detached(priority: .utility) { [provider] in
             let snapshot = provider.snapshot(for: kind, reading: reading)
             await MainActor.run {
+                guard self.generation == generation else { return }
+                self.isRefreshing = false
                 self.snapshot = snapshot
             }
         }
