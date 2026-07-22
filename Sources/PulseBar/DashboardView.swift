@@ -61,12 +61,6 @@ struct DashboardView: View {
             RoundedRectangle(cornerRadius: DashboardLayout.panelCornerRadius, style: .continuous)
                 .stroke(DashboardTheme.windowStroke, lineWidth: 1)
         }
-        .onAppear {
-            sampler.start(interval: preferences.refreshInterval)
-        }
-        .onChange(of: preferences.refreshInterval) { _, newValue in
-            sampler.start(interval: newValue)
-        }
     }
 
     private var metricCarousel: some View {
@@ -456,8 +450,7 @@ private struct CarouselArrow: View {
 
 struct MetricDetailPanelView: View {
     let kind: MetricKind
-    @ObservedObject var sampler: MetricsSampler
-    @StateObject private var viewModel = MetricDetailViewModel()
+    @ObservedObject var coordinator: DetailSamplingCoordinator
 
     var body: some View {
         ZStack {
@@ -473,7 +466,7 @@ struct MetricDetailPanelView: View {
                         Text("\(kind.title)详情")
                             .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .foregroundStyle(DashboardTheme.primaryText)
-                        Text(viewModel.snapshot?.summary ?? "正在读取")
+                        Text(coordinator.snapshot?.summary ?? "正在读取")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(DashboardTheme.secondaryText)
                             .lineLimit(1)
@@ -481,13 +474,26 @@ struct MetricDetailPanelView: View {
 
                     Spacer()
 
-                    Text(viewModel.snapshot?.capturedAt ?? Date(), style: .time)
+                    Button {
+                        coordinator.refresh(forceDiskScan: kind == .disk)
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DashboardTheme.secondaryText)
+                    .disabled(coordinator.isRefreshing)
+                    .opacity(coordinator.isRefreshing ? 0.45 : 1)
+                    .help(kind == .disk ? "重新扫描常用目录" : "立即刷新")
+
+                    Text(coordinator.snapshot?.capturedAt ?? Date(), style: .time)
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(DashboardTheme.tertiaryText)
                 }
 
                 ScrollView(showsIndicators: false) {
-                    if let snapshot = viewModel.snapshot {
+                    if let snapshot = coordinator.snapshot {
                         DetailRows(snapshot: snapshot)
                     } else {
                         VStack(spacing: 8) {
@@ -509,15 +515,6 @@ struct MetricDetailPanelView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(DashboardTheme.windowStroke, lineWidth: 1)
-        }
-        .onAppear {
-            viewModel.start(kind: kind, sampler: sampler)
-        }
-        .onChange(of: kind) { _, newKind in
-            viewModel.start(kind: newKind, sampler: sampler)
-        }
-        .onDisappear {
-            viewModel.stop()
         }
     }
 }
@@ -643,57 +640,6 @@ private struct DetailRowView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(DashboardTheme.stroke, lineWidth: 1)
-        }
-    }
-}
-
-@MainActor
-private final class MetricDetailViewModel: ObservableObject {
-    @Published var snapshot: MetricDetailSnapshot?
-
-    private let provider = ProcessDetailProvider()
-    private var timer: Timer?
-    private weak var sampler: MetricsSampler?
-    private var kind: MetricKind = .memory
-    private var generation = 0
-    private var isRefreshing = false
-
-    func start(kind: MetricKind, sampler: MetricsSampler) {
-        stop()
-        generation += 1
-        self.kind = kind
-        self.sampler = sampler
-        refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refresh()
-            }
-        }
-        if let timer {
-            RunLoop.main.add(timer, forMode: .common)
-        }
-    }
-
-    func stop() {
-        generation += 1
-        isRefreshing = false
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func refresh() {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        let kind = self.kind
-        let reading = sampler?.snapshot[kind]
-        let generation = self.generation
-        Task.detached(priority: .utility) { [provider] in
-            let snapshot = provider.snapshot(for: kind, reading: reading)
-            await MainActor.run {
-                guard self.generation == generation else { return }
-                self.isRefreshing = false
-                self.snapshot = snapshot
-            }
         }
     }
 }

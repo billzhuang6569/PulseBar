@@ -61,6 +61,43 @@ enum MetricKind: String, CaseIterable, Identifiable {
     }
 }
 
+enum SamplingMode: Equatable {
+    case menuBarOnly
+    case dashboardVisible
+    case detailVisible(MetricKind)
+}
+
+struct SamplingConfiguration: Equatable {
+    var mode: SamplingMode
+    var menuBarKind: MetricKind
+    var enabledKinds: Set<MetricKind>
+    var refreshInterval: TimeInterval
+
+    var requiredKinds: Set<MetricKind> {
+        switch mode {
+        case .menuBarOnly:
+            return [menuBarKind]
+        case .dashboardVisible, .detailVisible:
+            return enabledKinds.union([menuBarKind])
+        }
+    }
+
+    func interval(for kind: MetricKind, lowPowerMode: Bool) -> TimeInterval {
+        let base: TimeInterval
+        switch kind {
+        case .disk, .battery:
+            base = 60
+        case .network:
+            base = kind == menuBarKind ? refreshInterval : max(refreshInterval, 2)
+        case .cpu:
+            base = kind == menuBarKind ? refreshInterval : max(refreshInterval, 3)
+        case .memory:
+            base = kind == menuBarKind ? refreshInterval : max(refreshInterval, 5)
+        }
+        return max(base, 1) * (lowPowerMode ? 2 : 1)
+    }
+}
+
 struct MetricReading: Identifiable, Equatable {
     let kind: MetricKind
     let value: Double

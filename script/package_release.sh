@@ -3,11 +3,11 @@ set -euo pipefail
 
 EXECUTABLE_NAME="PulseBar"
 APP_NAME="庄Sir的状态栏"
-VERSION="0.4.4"
+VERSION="0.5.0"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
-ZIP_PATH="$DIST_DIR/$APP_NAME-$VERSION.zip"
+ZIP_PATH="$DIST_DIR/ZhuangSir-StatusBar-$VERSION.zip"
 
 cd "$ROOT_DIR"
 

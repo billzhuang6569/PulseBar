@@ -1,6 +1,18 @@
 import Foundation
 
-final class ProcessDetailProvider {
+final class ProcessDetailProvider: @unchecked Sendable {
+    private let runner: ProcessCommandRunner
+    private let diskCache: DiskDetailCache
+
+    init(runner: ProcessCommandRunner = ProcessCommandRunner(), diskCache: DiskDetailCache = DiskDetailCache()) {
+        self.runner = runner
+        self.diskCache = diskCache
+    }
+
+    func cancel() {
+        runner.cancelAll()
+    }
+
     func snapshot(for kind: MetricKind, reading: MetricReading?) -> MetricDetailSnapshot {
         switch kind {
         case .memory:
@@ -122,6 +134,16 @@ final class ProcessDetailProvider {
     }
 
     private func diskSnapshot(reading: MetricReading?) -> MetricDetailSnapshot {
+        if let cached = diskCache.value() {
+            return MetricDetailSnapshot(
+                kind: .disk,
+                summary: reading?.secondaryText ?? "硬盘占用",
+                rows: cached.rows,
+                capturedAt: cached.capturedAt,
+                note: "常用目录占用已缓存；点击刷新可重新扫描"
+            )
+        }
+
         let home = URL(fileURLWithPath: NSHomeDirectory())
         let candidates = [
             home.appendingPathComponent("Downloads"),
@@ -131,9 +153,18 @@ final class ProcessDetailProvider {
             home.appendingPathComponent("Pictures")
         ]
 
-        let rows = candidates.compactMap { url -> MetricDetailRow? in
-            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            let bytes = folderSize(url)
+        let existingCandidates = candidates.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard let sizes = folderSizes(existingCandidates) else {
+            return MetricDetailSnapshot(
+                kind: .disk,
+                summary: reading?.secondaryText ?? "硬盘占用",
+                rows: [],
+                capturedAt: Date(),
+                note: "扫描已取消或超时，请稍后点击刷新重试"
+            )
+        }
+        let rows = existingCandidates.map { url in
+            let bytes = sizes[url.path] ?? 0
             return MetricDetailRow(
                 id: "disk-\(url.path)",
                 name: localizedFolderName(url),
@@ -142,15 +173,17 @@ final class ProcessDetailProvider {
                 secondaryValue: "常用目录",
                 numericValue: Double(bytes)
             )
-        }
-        .sorted { $0.numericValue > $1.numericValue }
+        }.sorted { $0.numericValue > $1.numericValue }
+
+        let capturedAt = Date()
+        diskCache.store(rows: rows, capturedAt: capturedAt)
 
         return MetricDetailSnapshot(
             kind: .disk,
             summary: reading?.secondaryText ?? "硬盘占用",
             rows: rows,
-            capturedAt: Date(),
-            note: "硬盘详情先展示常用目录占用，避免用高权限文件监听伪装实时进程读写"
+            capturedAt: capturedAt,
+            note: "打开时扫描一次并缓存 15 分钟；点击刷新可重新扫描"
         )
     }
 
@@ -171,7 +204,7 @@ final class ProcessDetailProvider {
     }
 
     private func processRows() -> [ProcessRow] {
-        let output = runCommand("/bin/ps", arguments: ["-axo", "pid=,pcpu=,rss=,comm="])
+        let output = runner.run("/bin/ps", arguments: ["-axo", "pid=,pcpu=,rss=,comm="], timeout: 3).output
         return output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true)
             guard parts.count == 4,
@@ -193,10 +226,11 @@ final class ProcessDetailProvider {
     }
 
     private func nettopRows() -> [NetworkRow] {
-        let output = runCommand(
+        let output = runner.run(
             "/usr/bin/nettop",
-            arguments: ["-d", "-P", "-L", "2", "-s", "1", "-x", "-J", "bytes_in,bytes_out"]
-        )
+            arguments: ["-d", "-P", "-L", "2", "-s", "1", "-x", "-J", "bytes_in,bytes_out"],
+            timeout: 6
+        ).output
 
         return NettopSampleParser.processTraffic(from: output).map { sample in
             NetworkRow(
@@ -210,14 +244,24 @@ final class ProcessDetailProvider {
         }
     }
 
-    private func folderSize(_ url: URL) -> UInt64 {
-        let output = runCommand("/usr/bin/du", arguments: ["-sk", url.path])
-        guard let first = output.split(separator: "\t").first ?? output.split(separator: " ").first,
-              let kilobytes = UInt64(first)
-        else {
-            return 0
+    private func folderSizes(_ urls: [URL]) -> [String: UInt64]? {
+        guard !urls.isEmpty else { return [:] }
+        let result = runner.run(
+            "/usr/bin/du",
+            arguments: ["-sk"] + urls.map(\.path),
+            timeout: 30
+        )
+        guard !result.wasCancelled, !result.timedOut else {
+            return nil
         }
-        return kilobytes * 1024
+
+        var sizes: [String: UInt64] = [:]
+        for line in result.output.split(separator: "\n") {
+            let parts = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+            guard parts.count == 2, let kilobytes = UInt64(parts[0]) else { continue }
+            sizes[String(parts[1])] = kilobytes * 1024
+        }
+        return sizes
     }
 
     private func localizedFolderName(_ url: URL) -> String {
@@ -231,24 +275,6 @@ final class ProcessDetailProvider {
         }
     }
 
-    private func runCommand(_ path: String, arguments: [String]) -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-
-        do {
-            try process.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return String(data: data, encoding: .utf8) ?? ""
-        } catch {
-            return ""
-        }
-    }
 }
 
 struct NettopProcessTraffic: Equatable {

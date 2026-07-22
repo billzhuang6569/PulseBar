@@ -130,6 +130,7 @@ final class MenuBarMetricView: NSView {
     }
 }
 
+@MainActor
 final class StatusBarController: NSObject {
     private enum Layout {
         static let panelSize = NSSize(width: 340, height: 560)
@@ -147,6 +148,7 @@ final class StatusBarController: NSObject {
     private let detailPanel: NSPanel
     private let preferences: DisplayPreferences
     private let sampler: MetricsSampler
+    private let detailCoordinator = DetailSamplingCoordinator()
     private var cancellables = Set<AnyCancellable>()
     private var outsideClickMonitor: Any?
     private var selectedDetailKind: MetricKind?
@@ -176,11 +178,15 @@ final class StatusBarController: NSObject {
         configureDetailPanel()
         configureStatusView()
         bindUpdates()
+        configureSampling()
+        sampler.start()
         updateStatusItem(snapshot: sampler.snapshot)
 
         if ProcessInfo.processInfo.environment["PULSEBAR_SHOW_PANEL_ON_LAUNCH"] == "1" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-                self?.showPanelFromStatusItem()
+                guard let self else { return }
+                showPanelFromStatusItem()
+                showDiagnosticDetailIfRequested()
             }
         }
     }
@@ -188,6 +194,8 @@ final class StatusBarController: NSObject {
     func stop() {
         cancellables.removeAll()
         removeOutsideClickMonitor()
+        detailCoordinator.stop()
+        sampler.stop()
         panel.orderOut(nil)
         detailPanel.orderOut(nil)
         NSStatusBar.system.removeStatusItem(statusItem)
@@ -260,6 +268,7 @@ final class StatusBarController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                configureSampling()
                 updateStatusItem(snapshot: sampler.snapshot)
             }
             .store(in: &cancellables)
@@ -276,7 +285,15 @@ final class StatusBarController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                configureSampling()
                 updateStatusItem(snapshot: sampler.snapshot)
+            }
+            .store(in: &cancellables)
+
+        preferences.$refreshInterval
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.configureSampling()
             }
             .store(in: &cancellables)
     }
@@ -308,6 +325,7 @@ final class StatusBarController: NSObject {
         panel.alphaValue = 0
         NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
+        configureSampling()
 
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
@@ -324,11 +342,28 @@ final class StatusBarController: NSObject {
         showPanel(relativeTo: statusView)
     }
 
+    private func showDiagnosticDetailIfRequested() {
+        let environment = ProcessInfo.processInfo.environment
+        if let rawKind = environment["PULSEBAR_SHOW_DETAIL_ON_LAUNCH"],
+           let kind = MetricKind(rawValue: rawKind) {
+            setDetailKind(kind)
+        }
+
+        if let rawDelay = environment["PULSEBAR_CLOSE_PANEL_AFTER_SECONDS"],
+           let delay = TimeInterval(rawDelay), delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.closePanel()
+            }
+        }
+    }
+
     private func closePanel() {
         removeOutsideClickMonitor()
+        detailCoordinator.stop()
         panel.orderOut(nil)
         detailPanel.orderOut(nil)
         selectedDetailKind = nil
+        configureSampling()
     }
 
     private func positionPanel(relativeTo anchorView: NSView) {
@@ -362,13 +397,17 @@ final class StatusBarController: NSObject {
 
         guard let kind else {
             selectedDetailKind = nil
+            detailCoordinator.stop()
             detailPanel.orderOut(nil)
+            configureSampling()
             return
         }
 
         selectedDetailKind = kind
+        detailCoordinator.start(kind: kind, sampler: sampler)
+        configureSampling()
         detailPanel.contentViewController = NSHostingController(
-            rootView: MetricDetailPanelView(kind: kind, sampler: sampler)
+            rootView: MetricDetailPanelView(kind: kind, coordinator: detailCoordinator)
         )
         positionDetailPanel()
         detailPanel.alphaValue = 0
@@ -418,5 +457,25 @@ final class StatusBarController: NSObject {
             NSEvent.removeMonitor(outsideClickMonitor)
             self.outsideClickMonitor = nil
         }
+    }
+
+    private func configureSampling() {
+        let mode: SamplingMode
+        if panel.isVisible, let selectedDetailKind {
+            mode = .detailVisible(selectedDetailKind)
+        } else if panel.isVisible {
+            mode = .dashboardVisible
+        } else {
+            mode = .menuBarOnly
+        }
+
+        sampler.configure(
+            SamplingConfiguration(
+                mode: mode,
+                menuBarKind: preferences.menuBarKind,
+                enabledKinds: preferences.enabledKinds,
+                refreshInterval: preferences.refreshInterval
+            )
+        )
     }
 }

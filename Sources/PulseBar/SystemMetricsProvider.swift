@@ -6,15 +6,33 @@ final class SystemMetricsProvider {
     private var previousNetworkTotals: (received: UInt64, sent: UInt64, date: Date)?
     private var previousCPUTicks: (used: UInt64, total: UInt64)?
 
-    func snapshot() -> SystemSnapshot {
+    func snapshot(kinds: Set<MetricKind>) -> SystemSnapshot {
         var readings: [MetricKind: MetricReading] = [:]
-        readings[.memory] = memoryReading()
-        readings[.network] = networkReading()
-        readings[.disk] = diskReading()
-        readings[.cpu] = cpuReading()
-        readings[.battery] = batteryReading()
+        for kind in MetricKind.allCases where kinds.contains(kind) {
+            switch kind {
+            case .memory:
+                readings[.memory] = memoryReading()
+            case .network:
+                readings[.network] = networkReading()
+            case .disk:
+                readings[.disk] = diskReading()
+            case .cpu:
+                readings[.cpu] = cpuReading()
+            case .battery:
+                readings[.battery] = batteryReading()
+            }
+        }
 
         return SystemSnapshot(readings: readings, capturedAt: Date())
+    }
+
+    func resetBaselines(for kinds: Set<MetricKind>) {
+        if kinds.contains(.network) {
+            previousNetworkTotals = nil
+        }
+        if kinds.contains(.cpu) {
+            previousCPUTicks = nil
+        }
     }
 
     private func memoryReading() -> MetricReading {

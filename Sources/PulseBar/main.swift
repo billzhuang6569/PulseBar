@@ -4,15 +4,16 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusController: StatusBarController?
 
+    @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
         let preferences = DisplayPreferences()
         let sampler = MetricsSampler()
         statusController = StatusBarController(preferences: preferences, sampler: sampler)
-        sampler.start()
     }
 
+    @MainActor
     func applicationWillTerminate(_ notification: Notification) {
         statusController?.stop()
     }
